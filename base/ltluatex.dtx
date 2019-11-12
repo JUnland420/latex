@@ -1239,12 +1239,13 @@ local callbacklist = callbacklist or { }
 % Numerical codes for callback types, and name-to-value association (the
 % table keys are strings, the values are numbers).
 %    \begin{macrocode}
-local list, data, exclusive, simple = 1, 2, 3, 4
-local types = {
-  list      = list,
-  data      = data,
-  exclusive = exclusive,
-  simple    = simple,
+local list, data, exclusive, simple, reverselist = 1, 2, 3, 4, 5
+local types   = {
+  list        = list,
+  data        = data,
+  exclusive   = exclusive,
+  simple      = simple,
+  reverselist = reverselist,
 }
 %    \end{macrocode}
 %
@@ -1319,6 +1320,7 @@ local callbacktypes = callbacktypes or {
 % \changes{v1.1k}{2019/10/02}{linebreak\_filter is \texttt{exclusive}}
 % \changes{v1.1k}{2019/10/02}{process\_rule is \texttt{exclusive}}
 % \changes{v1.1k}{2019/10/02}{mlist\_to\_hlist is \texttt{exclusive}}
+% \changes{v1.1l}{2019/11/12}{linebreak\_filter is \texttt{reverselist}}
 %    \begin{macrocode}
   contribute_filter      = simple,
   buildpage_filter       = simple,
@@ -1326,7 +1328,7 @@ local callbacktypes = callbacktypes or {
   pre_linebreak_filter   = list,
   linebreak_filter       = exclusive,
   append_to_vlist_filter = exclusive,
-  post_linebreak_filter  = list,
+  post_linebreak_filter  = reverselist,
   hpack_filter           = list,
   vpack_filter           = list,
   hpack_quality          = list,
@@ -1442,6 +1444,8 @@ end
 %     |true|, then the same head is passed to the next function. If all
 %     functions return |true|, then |true| is returned, otherwise the return
 %     value of the last function not returning |true| is used.
+%   \item[reverselist] is a specialized variant of \emph{list} which executes
+%     functions in inverse order.
 %   \item[exclusive] is for functions with more complex signatures; functions in
 %     this type of callback are \emph{not} combined: An error is raised if
 %     a second callback is registered..
@@ -1493,6 +1497,33 @@ local function list_handler(name)
   end
 end
 %    \end{macrocode}
+% Handler for |reverselist| callbacks.
+% \changes{v1.1l}{2019/11/12}{Add reverselist callback type} -- FIXME
+%    \begin{macrocode}
+local function reverselist_handler(name)
+  return function(head, ...)
+    local ret
+    local alltrue = true
+    local callbacks = callbacklist[name]
+    for i = #callbacks, 1, -1 do
+      local cb = callbacks[i]
+      ret = cb.func(head, ...)
+      if ret == false then
+        luatexbase_warning(
+          "Function `" .. cb.description .. "' returned false\n"
+            .. "in callback `" .. name .."'"
+         )
+         break
+      end
+      if ret ~= true then
+        alltrue = false
+        head = ret
+      end
+    end
+    return alltrue and true or head
+  end
+end
+%    \end{macrocode}
 % Handler for |simple| callbacks.
 %    \begin{macrocode}
 local function simple_handler(name)
@@ -1506,11 +1537,12 @@ end
 %
 % Keep a handlers table for indexed access.
 %    \begin{macrocode}
-local handlers = {
-  [data]      = data_handler,
-  [exclusive] = exclusive_handler,
-  [list]      = list_handler,
-  [simple]    = simple_handler,
+local handlers  = {
+  [data]        = data_handler,
+  [exclusive]   = exclusive_handler,
+  [list]        = list_handler,
+  [reverselist] = reverselist_handler,
+  [simple]      = simple_handler,
 }
 %    \end{macrocode}
 %
